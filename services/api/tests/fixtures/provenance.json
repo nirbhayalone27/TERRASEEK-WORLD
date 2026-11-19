@@ -1,0 +1,25 @@
+{
+  "scenes": [
+    "S2B_43QCA_20250103_0_L2A",
+    "S2B_43QCA_20250113_0_L2A"
+  ],
+  "sources": [
+    "https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/S2B_43QCA_20250103_0_L2A",
+    "https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/S2B_43QCA_20250113_0_L2A"
+  ],
+  "result": {
+    "valid_pixels": 256,
+    "total_pixels": 256,
+    "valid_percent": 100.0,
+    "resolution_m": 20,
+    "threshold": 0.2,
+    "area_ha": {
+      "vegetation_loss": 1.4,
+      "vegetation_gain": 0.0,
+      "water_appeared": 0.0,
+      "water_disappeared": 0.0
+    },
+    "method": "Calibrated reflectance; common UTM grid; SCL 4/5/6 intersection; NDVI difference and NDWI>0.2; exploratory, no accuracy claim"
+  },
+  "elapsed_seconds": 24.65212917327881
+}
