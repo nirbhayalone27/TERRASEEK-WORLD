@@ -1,10 +1,123 @@
-import {Suspense,useEffect,useRef,useMemo} from 'react';
-import {Canvas,useFrame,useThree} from '@react-three/fiber';
-import {OrbitControls,useTexture,Line} from '@react-three/drei';
-import {Vector3,BufferGeometry,Float32BufferAttribute} from 'three';
-import type {Place} from './lib/api';
-export function xyz(lat:number,lon:number,r=1):[number,number,number]{const p=lat*Math.PI/180,l=lon*Math.PI/180;return [r*Math.cos(p)*Math.cos(l),r*Math.sin(p),-r*Math.cos(p)*Math.sin(l)]}
-function Earth({place,points,track,onPick}:{place:Place;points:any[];track:any[];onPick:(lat:number,lon:number)=>void}){const texture=useTexture('/earth.webp');const controls=useRef<any>(null);const target=useRef(new Vector3(...xyz(place.lat,place.lon,3.3)));const moving=useRef(true);const {camera}=useThree();useEffect(()=>{target.current.set(...xyz(place.lat,place.lon,3.3));moving.current=true},[place]);useFrame(()=>{if(moving.current){camera.position.lerp(target.current,0.045);camera.lookAt(0,0,0);if(camera.position.distanceTo(target.current)<.015)moving.current=false}});
-const geometry=useMemo(()=>{const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(points.flatMap(p=>xyz(p.lat,p.lon,1+p.alt/6371)),3));return g},[points]);useEffect(()=>()=>geometry.dispose(),[geometry]);
-return <><ambientLight intensity={1.8}/><directionalLight position={[5,3,5]} intensity={1.4}/><mesh onDoubleClick={e=>{e.stopPropagation();const p=e.point.clone().normalize();onPick(Math.asin(p.y)*180/Math.PI,Math.atan2(-p.z,p.x)*180/Math.PI)}}><sphereGeometry args={[1,96,64]}/><meshStandardMaterial map={texture} roughness={.9}/></mesh><mesh scale={1.007}><sphereGeometry args={[1,64,48]}/><meshBasicMaterial color="#b6d9ed" transparent opacity={.055}/></mesh><points geometry={geometry}><pointsMaterial color="#c88a45" size={.009} sizeAttenuation/></points>{track.length>1&&<Line points={track.map(p=>xyz(p.lat,p.lon,1+p.alt/6371))} color="#c78b46" lineWidth={1.3}/>}<mesh position={xyz(place.lat,place.lon,1.012)}><sphereGeometry args={[.009,12,12]}/><meshBasicMaterial color="#fff"/></mesh><OrbitControls ref={controls} enablePan={false} minDistance={1.3} maxDistance={6} onStart={()=>moving.current=false} enableDamping/></>}
-export default function Globe(props:{place:Place;points:any[];track:any[];onPick:(lat:number,lon:number)=>void}){return <Canvas camera={{position:xyz(20,70,3.3),fov:42}} dpr={[1,1.5]} gl={{antialias:true,alpha:true}}><Suspense fallback={null}><Earth {...props}/></Suspense></Canvas>}
+import { Suspense, useEffect, useRef, useMemo } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { OrbitControls, useTexture, Line } from "@react-three/drei";
+import { Vector3, BufferGeometry, Float32BufferAttribute } from "three";
+import type { Place } from "./lib/api";
+export function xyz(lat: number, lon: number, r = 1): [number, number, number] {
+  const p = (lat * Math.PI) / 180,
+    l = (lon * Math.PI) / 180;
+  return [
+    r * Math.cos(p) * Math.cos(l),
+    r * Math.sin(p),
+    -r * Math.cos(p) * Math.sin(l),
+  ];
+}
+function Earth({
+  place,
+  points,
+  track,
+  onPick,
+}: {
+  place: Place;
+  points: any[];
+  track: any[];
+  onPick: (lat: number, lon: number) => void;
+}) {
+  const texture = useTexture("/earth.webp");
+  const controls = useRef<any>(null);
+  const target = useRef(new Vector3(...xyz(place.lat, place.lon, 3.3)));
+  const moving = useRef(true);
+  const { camera } = useThree();
+  useEffect(() => {
+    target.current.set(...xyz(place.lat, place.lon, 3.3));
+    moving.current = true;
+  }, [place]);
+  useFrame(() => {
+    if (moving.current) {
+      camera.position.lerp(
+        target.current,
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? 1
+          : 0.045,
+      );
+      camera.lookAt(0, 0, 0);
+      if (camera.position.distanceTo(target.current) < 0.015)
+        moving.current = false;
+    }
+  });
+  const geometry = useMemo(() => {
+    const g = new BufferGeometry();
+    g.setAttribute(
+      "position",
+      new Float32BufferAttribute(
+        points.flatMap((p) => xyz(p.lat, p.lon, 1 + p.alt / 6371)),
+        3,
+      ),
+    );
+    return g;
+  }, [points]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <>
+      <ambientLight intensity={1.8} />
+      <directionalLight position={[5, 3, 5]} intensity={1.4} />
+      <mesh
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          const p = e.point.clone().normalize();
+          onPick(
+            (Math.asin(p.y) * 180) / Math.PI,
+            (Math.atan2(-p.z, p.x) * 180) / Math.PI,
+          );
+        }}
+      >
+        <sphereGeometry args={[1, 96, 64]} />
+        <meshStandardMaterial map={texture} roughness={0.9} />
+      </mesh>
+      <mesh scale={1.007}>
+        <sphereGeometry args={[1, 64, 48]} />
+        <meshBasicMaterial color="#b6d9ed" transparent opacity={0.055} />
+      </mesh>
+      <points geometry={geometry}>
+        <pointsMaterial color="#c88a45" size={0.009} sizeAttenuation />
+      </points>
+      {track.length > 1 && (
+        <Line
+          points={track.map((p) => xyz(p.lat, p.lon, 1 + p.alt / 6371))}
+          color="#c78b46"
+          lineWidth={1.3}
+        />
+      )}
+      <mesh position={xyz(place.lat, place.lon, 1.012)}>
+        <sphereGeometry args={[0.009, 12, 12]} />
+        <meshBasicMaterial color="#fff" />
+      </mesh>
+      <OrbitControls
+        ref={controls}
+        enablePan={false}
+        minDistance={1.3}
+        maxDistance={6}
+        onStart={() => (moving.current = false)}
+        enableDamping
+      />
+    </>
+  );
+}
+export default function Globe(props: {
+  place: Place;
+  points: any[];
+  track: any[];
+  onPick: (lat: number, lon: number) => void;
+}) {
+  return (
+    <Canvas
+      camera={{ position: xyz(20, 70, 3.3), fov: 42 }}
+      dpr={[1, 1.5]}
+      gl={{ antialias: true, alpha: true }}
+    >
+      <Suspense fallback={null}>
+        <Earth {...props} />
+      </Suspense>
+    </Canvas>
+  );
+}
