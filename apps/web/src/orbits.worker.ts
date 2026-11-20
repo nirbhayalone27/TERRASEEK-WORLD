@@ -1,3 +1,4 @@
+import { position as point } from "./lib/orbit";
 import {
   json2satrec,
   propagate,
@@ -7,17 +8,6 @@ import {
   ecfToLookAngles,
 } from "satellite.js";
 let catalog: any[] = [];
-const point = (rec: any, t: number) => {
-  const pv = propagate(rec, new Date(t));
-  if (!pv?.position || typeof pv.position === "boolean") return null;
-  const g = eciToGeodetic(pv.position, gstime(new Date(t)));
-  return {
-    lat: (g.latitude * 180) / Math.PI,
-    lon: (g.longitude * 180) / Math.PI,
-    alt: g.height,
-    p: pv.position,
-  };
-};
 self.onmessage = ({ data }) => {
   try {
     if (data.type === "load") {
@@ -45,7 +35,7 @@ self.onmessage = ({ data }) => {
           }
         })
         .filter(Boolean);
-      self.postMessage({ type: "positions", points });
+      self.postMessage({ type: "positions", points, time: data.time });
     }
     if (data.type === "track") {
       const s = catalog.find((x) => x.meta.NORAD_CAT_ID === data.id);
@@ -61,7 +51,11 @@ self.onmessage = ({ data }) => {
       for (let t = data.time; t <= data.time + 86400000; t += 30000) {
         const p = point(s.rec, t);
         if (!p) continue;
-        if (t <= data.time + 6000000) track.push(p);
+        if (
+          t <=
+          data.time + Math.min(86400000, 86400000 / Number(s.meta.MEAN_MOTION))
+        )
+          track.push(p);
         const angle =
           (ecfToLookAngles(observer, eciToEcf(p.p, gstime(new Date(t))))
             .elevation *
@@ -77,7 +71,13 @@ self.onmessage = ({ data }) => {
         }
       }
       if (pass) passes.push({ ...pass, end: null });
-      self.postMessage({ type: "track", id: data.id, track, passes });
+      self.postMessage({
+        type: "track",
+        id: data.id,
+        requestId: data.requestId,
+        track,
+        passes,
+      });
     }
   } catch (e) {
     self.postMessage({ type: "error", message: String(e) });

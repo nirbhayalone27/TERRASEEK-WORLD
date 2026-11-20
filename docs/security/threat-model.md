@@ -10,3 +10,7 @@
 - Data integrity: provider scale/offset and SCL can have imperfections. Spatial grid alignment does not equal subpixel co-registration. No accuracy or confidence score is fabricated.
 
 Threats not solved: DDoS, paid usage enforcement, private imagery ingestion, tamper-proof audit records, organization role escalation testing, backup/restore validation, observability/SLOs, defence compliance.
+
+## Evidence Q&A boundary
+
+The public assistant endpoint is a bounded interpreter, not a general LLM. It validates counts, chronology and HTTPS source hosts, and never fetches arbitrary supplied URLs. It accepts browser-computed measurements and explicitly marks them as not server verified. It cannot establish authenticity of a report or replace an authenticated server-side processing job. Model-generated claims and tool execution are not enabled. No API keys were added by the November 20 upgrade.

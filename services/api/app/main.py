@@ -100,8 +100,8 @@ class Search(BaseModel):
             raise ValueError("Start must precede end")
         if self.end > date.today():
             raise ValueError("Future acquisitions are unavailable")
-        if (self.end - self.start).days > 3660:
-            raise ValueError("Maximum interval is ten years")
+        if (self.end - self.start).days > 20000:
+            raise ValueError("Maximum interval is approximately 54 years")
         return self
 
 
@@ -184,6 +184,9 @@ async def imagery(s: Search):
                 "date": p.get("datetime"),
                 "cloud": p.get("eo:cloud_cover"),
                 "sensor": p.get("platform", s.collection),
+                "instruments": p.get("instruments", []),
+                "resolution": p.get("gsd"),
+                "attribution": "USGS Landsat" if s.collection == "landsat-c2-l2" else "Copernicus Sentinel",
                 "collection": s.collection,
                 "thumbnail": a.get("thumbnail", a.get("rendered_preview", {})).get(
                     "href"
@@ -283,3 +286,11 @@ async def raster(request: Request, url: str):
                 )
         except httpx.HTTPError as exc:
             raise HTTPException(502, "Raster provider unavailable") from exc
+
+
+from services.api.app.assistant import EvidenceQuestion, answer
+
+
+@app.post('/api/v1/assistant')
+async def evidence_assistant(question: EvidenceQuestion):
+    return answer(question)

@@ -77,3 +77,9 @@ Both scenes must cover the crop and share a tile/projection. Scale/offset metada
 ## Ownership and licensing
 
 Maintainer: Nirbhay Alone, `nirbhayalone27`. AI-assisted implementation with Codex. Original code is MIT; upstream imagery, map and texture licenses remain applicable. See [third-party notices](THIRD_PARTY_NOTICES.md). Watched.earth was an architectural reference; TerraSeek is independently branded.
+
+## November 20 exploration upgrade
+
+Added clickable orbital points, follow mode, ground tracks, playback controls, an accessible How It Works modal and a session-once introduction. Independent historical search windows preserve the selected baseline across searches; Landsat crops can be compared visually on a shared 30 m grid. A backend bounded evidence Q&A answers supported questions after Sentinel-2 measurement; **a general AI model is not configured**.
+
+See the [implementation and verification checkpoint](docs/deployment/2026-11-20-checkpoint.md) and [API additions](docs/architecture/api.md) for precise status and remaining gaps. Earlier table entries describe the baseline release and must not be interpreted as new end-to-end verification. Supabase access remains blocked: the connected account lists no projects.

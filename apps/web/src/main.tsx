@@ -27,6 +27,11 @@ import {
 } from "./lib/api";
 import { pairIssues } from "./lib/catalog";
 import "./style.css";
+import Introduction from "./Introduction";
+import ComparisonAssistant from "./ComparisonAssistant";
+import HistoricalViewer from "./HistoricalViewer";
+import HowItWorks from "./HowItWorks";
+import { category } from "./lib/orbit";
 const Globe = lazy(() => import("./Globe"));
 const MapView = lazy(() => import("./Map"));
 const supabase =
@@ -87,6 +92,12 @@ function App() {
     [scenes, setScenes] = useState<Observation[]>([]),
     [before, setBefore] = useState<Observation>(),
     [after, setAfter] = useState<Observation>();
+  const [archiveSlot, setArchiveSlot] = useState<"before" | "after">("before");
+  const [baselineStart, setBaselineStart] = useState("2014-01-01");
+  const [baselineEnd, setBaselineEnd] = useState("2014-03-31");
+  const [comparisonStart, setComparisonStart] = useState("2025-01-01");
+  const [comparisonEnd, setComparisonEnd] = useState("2025-03-31");
+  const [historical, setHistorical] = useState(false);
   const [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
     [searched, setSearched] = useState(false),
@@ -111,6 +122,14 @@ function App() {
     [email, setEmail] = useState(""),
     [user, setUser] = useState<any>(null),
     [notice, setNotice] = useState("");
+  const [following, setFollowing] = useState(false);
+  const [satCategory, setSatCategory] = useState("All");
+  const [speed, setSpeed] = useState(1);
+  const [orbitTime, setOrbitTime] = useState(Date.now());
+  const clock = useRef(Date.now());
+  const trackRequest = useRef(0);
+  const selectedMeta = catalog.find((s) => s.NORAD_CAT_ID === selected);
+  const selectedPosition = points.find((s) => s.id === selected);
   const worker = useRef<Worker | null>(null),
     abort = useRef<AbortController | null>(null),
     requestVersion = useRef(0);
@@ -158,7 +177,7 @@ function App() {
     );
     worker.current.onmessage = ({ data }) => {
       if (data.type === "positions") setPoints(data.points);
-      if (data.type === "track") {
+      if (data.type === "track" && data.requestId === trackRequest.current) {
         setTrack(data.track);
         setPasses(data.passes);
         setOrbitLoading(false);
@@ -178,27 +197,49 @@ function App() {
     return () => worker.current?.terminate();
   }, []);
   useEffect(() => {
-    const tick = () =>
-      worker.current?.postMessage({
-        type: "positions",
-        time: Date.now() + offset * 60000,
-      });
-    tick();
-    const timer = setInterval(tick, 5000);
-    return () => clearInterval(timer);
-  }, [offset, catalog]);
+    clock.current = Date.now() + offset * 60000;
+  }, [offset]);
   useEffect(() => {
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      clock.current += (now - last) * speed;
+      last = now;
+      // This is a near-epoch replay, never a historical orbit reconstruction.
+      if (Math.abs(clock.current - Date.now()) > 7200000) {
+        clock.current = Date.now();
+        setSpeed(1);
+        setOffset(0);
+      }
+      if (document.hidden) return;
+      setOrbitTime(clock.current);
+      worker.current?.postMessage({ type: "positions", time: clock.current });
+    };
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [speed, catalog]);
+  useEffect(() => {
+    const requestId = ++trackRequest.current;
+    setTrack([]);
+    setPasses([]);
     if (selected) {
       setOrbitLoading(true);
       worker.current?.postMessage({
         type: "track",
         id: selected,
-        time: Date.now() + offset * 60000,
+        requestId,
+        time: clock.current,
         lat: place.lat,
         lon: place.lon,
       });
-    }
+    } else setOrbitLoading(false);
   }, [selected, place, offset]);
+  function selectSatellite(id: number) {
+    setSelected(id);
+    setFollowing(false);
+    setTab("satellites");
+  }
   function selectPlace(p: Place) {
     requestVersion.current++;
     abort.current?.abort();
@@ -236,19 +277,26 @@ function App() {
       if (version === requestVersion.current) setBusy("");
     }
   }
-  async function findScenes() {
+  async function findScenes(slot?: "before" | "after") {
     const version = ++requestVersion.current;
     setBusy("Searching satellite archives");
     setError("");
     setResult(null);
-    setBefore(undefined);
-    setAfter(undefined);
+    if (!slot) {
+      setBefore(undefined);
+      setAfter(undefined);
+    }
+    if (slot) setArchiveSlot(slot);
     try {
       const d = await api<any>("imagery/search", {
         lat: place.lat,
         lon: place.lon,
-        start,
-        end,
+        start: slot
+          ? slot === "before"
+            ? baselineStart
+            : comparisonStart
+          : start,
+        end: slot ? (slot === "before" ? baselineEnd : comparisonEnd) : end,
         cloud,
         collection,
       });
@@ -298,6 +346,7 @@ function App() {
         afterScene: after.id,
         dates: [before.date, after.date],
         sources: [before.source, after.source],
+        sensors: [before.sensor, after.sensor],
         created: new Date().toISOString(),
       });
       setTab("compare");
@@ -310,6 +359,11 @@ function App() {
   function pickScene(s: Observation) {
     if (busy) return;
     setResult(null);
+    if (historical) {
+      if (archiveSlot === "before") setBefore(s);
+      else setAfter(s);
+      return;
+    }
     if (!before || after) {
       setBefore(s);
       setAfter(undefined);
@@ -393,6 +447,7 @@ function App() {
     : 0;
   return (
     <div className="app">
+      <Introduction />
       <header>
         <a className="brand" href="/" aria-label="TerraSeek home">
           <span className="brand-icon">
@@ -401,6 +456,9 @@ function App() {
           terra<span>seek</span>
           <sup>WORLD</sup>
         </a>
+        <button className="how-button" onClick={() => setModal("how")}>
+          How It Works
+        </button>
         <nav>
           <button
             className={tab !== "satellites" ? "active" : ""}
@@ -432,7 +490,20 @@ function App() {
               {view === "3d" ? (
                 <Globe
                   place={place}
-                  points={showSats ? points : []}
+                  points={
+                    showSats
+                      ? points.filter(
+                          (p) =>
+                            satCategory === "All" ||
+                            category(p.name) === satCategory,
+                        )
+                      : []
+                  }
+                  selected={selected}
+                  following={following}
+                  paused={!!busy || tab === "compare" || !!modal}
+                  onSelect={selectSatellite}
+                  onInteract={() => setFollowing(false)}
                   track={track}
                   onPick={(lat, lon) =>
                     selectPlace({ name: "Selected study area", lat, lon })
@@ -513,6 +584,63 @@ function App() {
               <span>2.56 × 2.56 km</span>
             </div>
             <div className="rule" />
+            <label>
+              <input
+                type="checkbox"
+                checked={historical}
+                onChange={(e) => {
+                  setHistorical(e.target.checked);
+                  setBefore(undefined);
+                  setAfter(undefined);
+                  setResult(null);
+                }}
+              />{" "}
+              Independent historical periods
+            </label>
+            {historical && (
+              <div className="historical-dates">
+                <label>Baseline range</label>
+                <div className="dates">
+                  <input
+                    aria-label="Baseline start"
+                    type="date"
+                    value={baselineStart}
+                    onChange={(e) => setBaselineStart(e.target.value)}
+                  />
+                  <input
+                    aria-label="Baseline end"
+                    type="date"
+                    value={baselineEnd}
+                    onChange={(e) => setBaselineEnd(e.target.value)}
+                  />
+                </div>
+                <button onClick={() => findScenes("before")} disabled={!!busy}>
+                  Find baseline observations
+                </button>
+                <label>Comparison range</label>
+                <div className="dates">
+                  <input
+                    aria-label="Comparison start"
+                    type="date"
+                    value={comparisonStart}
+                    onChange={(e) => setComparisonStart(e.target.value)}
+                  />
+                  <input
+                    aria-label="Comparison end"
+                    type="date"
+                    value={comparisonEnd}
+                    onChange={(e) => setComparisonEnd(e.target.value)}
+                  />
+                </div>
+                <button onClick={() => findScenes("after")} disabled={!!busy}>
+                  Find comparison observations
+                </button>
+                <p className="micro">
+                  Use Landsat for 2014 and earlier. Exact acquisition dates
+                  appear in the results; dates are never silently substituted.
+                </p>
+              </div>
+            )}
             <label>Observation period</label>
             <div className="dates">
               <input
@@ -535,7 +663,13 @@ function App() {
                 Imagery source
                 <select
                   value={collection}
-                  onChange={(e) => setCollection(e.target.value)}
+                  onChange={(e) => {
+                    setCollection(e.target.value);
+                    setBefore(undefined);
+                    setAfter(undefined);
+                    setResult(null);
+                    setScenes([]);
+                  }}
                 >
                   <option value="sentinel-2-l2a">Sentinel-2 · optical</option>
                   <option value="landsat-c2-l2">Landsat · optical</option>
@@ -558,7 +692,7 @@ function App() {
             </div>
             <button
               className="primary full"
-              onClick={findScenes}
+              onClick={() => findScenes()}
               disabled={!!busy}
             >
               <ScanLine size={16} />
@@ -663,8 +797,71 @@ function App() {
               onChange={(e) => setSatFilter(e.target.value)}
               placeholder="Search satellite name or NORAD ID"
             />
+            <label>
+              Category (name-based hint)
+              <select
+                aria-label="Satellite category"
+                value={satCategory}
+                onChange={(e) => setSatCategory(e.target.value)}
+              >
+                {[
+                  "All",
+                  "Earth observation",
+                  "Communications",
+                  "Navigation",
+                  "Crewed station",
+                  "Other / unclassified",
+                  "Debris / rocket body",
+                ].map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            {selectedMeta && (
+              <section
+                className="satellite-detail"
+                aria-label="Selected satellite"
+              >
+                <h3>{selectedMeta.OBJECT_NAME}</h3>
+                <p>
+                  NORAD {selected} · {category(selectedMeta.OBJECT_NAME)}
+                </p>
+                <dl>
+                  <dt>Altitude</dt>
+                  <dd>
+                    {selectedPosition
+                      ? selectedPosition.alt.toFixed(1) + " km"
+                      : "Unavailable"}
+                  </dd>
+                  <dt>Inclination</dt>
+                  <dd>{selectedMeta.INCLINATION}°</dd>
+                  <dt>Element epoch</dt>
+                  <dd>{selectedMeta.EPOCH} UTC</dd>
+                </dl>
+                <button onClick={() => setFollowing(!following)}>
+                  {following ? "Exit follow" : "Follow satellite"}
+                </button>
+                <button
+                  onClick={() => {
+                    setSelected(undefined);
+                    setFollowing(false);
+                  }}
+                >
+                  Clear selection
+                </button>
+                <p className="micro">
+                  Solid: predicted trajectory · dashed: ground track. No sensor
+                  footprint is inferred.
+                </p>
+              </section>
+            )}
             <div className="satlist">
               {catalog
+                .filter(
+                  (s) =>
+                    satCategory === "All" ||
+                    category(s.OBJECT_NAME) === satCategory,
+                )
                 .filter((s) =>
                   (s.OBJECT_NAME + " " + s.NORAD_CAT_ID)
                     .toLowerCase()
@@ -675,7 +872,7 @@ function App() {
                   <button
                     className={selected === s.NORAD_CAT_ID ? "selected" : ""}
                     key={s.NORAD_CAT_ID}
-                    onClick={() => setSelected(s.NORAD_CAT_ID)}
+                    onClick={() => selectSatellite(s.NORAD_CAT_ID)}
                   >
                     <Satellite size={15} />
                     <span>
@@ -688,6 +885,37 @@ function App() {
                     <ArrowUpRight size={14} />
                   </button>
                 ))}
+            </div>
+            <div className="replay-controls">
+              <time>
+                {new Date(orbitTime)
+                  .toISOString()
+                  .replace("T", " ")
+                  .slice(0, 19)}{" "}
+                UTC
+              </time>
+              <label>
+                Playback speed
+                <select
+                  aria-label="Playback speed"
+                  value={speed}
+                  onChange={(e) => setSpeed(+e.target.value)}
+                >
+                  <option value={0}>Paused</option>
+                  <option value={1}>Real time</option>
+                  <option value={30}>30×</option>
+                  <option value={60}>60×</option>
+                </select>
+              </label>
+              <button
+                onClick={() => {
+                  clock.current = Date.now();
+                  setOffset(0);
+                  setSpeed(1);
+                }}
+              >
+                Return to live
+              </button>
             </div>
             <label>
               Replay offset: {offset} minutes
@@ -738,7 +966,9 @@ function App() {
             </div>
             <h2>{scenes.length} observations.</h2>
             <p className="muted">
-              Select a baseline, then a later observation.
+              {historical
+                ? `Selecting ${archiveSlot === "before" ? "baseline" : "comparison"} acquisition. Search the other period to complete the pair.`
+                : "Select a baseline, then a later observation."}
             </p>
             {notice && <p className="micro">{notice}</p>}
             {!scenes.length && searched && (
@@ -788,6 +1018,34 @@ function App() {
               ))}
             </div>
             {before && (
+              <div className="micro">
+                Baseline: {before.sensor} · {before.date} ·{" "}
+                <a href={before.source} target="_blank" rel="noreferrer">
+                  Acquisition metadata ↗
+                </a>
+              </div>
+            )}
+            {after && (
+              <div className="micro">
+                Comparison: {after.sensor} · {after.date} ·{" "}
+                <a href={after.source} target="_blank" rel="noreferrer">
+                  Acquisition metadata ↗
+                </a>
+              </div>
+            )}
+            {before &&
+              after &&
+              before.collection === "landsat-c2-l2" &&
+              after.collection === "landsat-c2-l2" &&
+              before.date < after.date && (
+                <HistoricalViewer
+                  key={before.id + after.id + place.lat + place.lon}
+                  before={before}
+                  after={after}
+                  place={place}
+                />
+              )}
+            {before && (
               <div className="selection">
                 <p>
                   01 <strong>{date(before.date)}</strong> → 02{" "}
@@ -816,8 +1074,9 @@ function App() {
                 </button>
                 {collection !== "sentinel-2-l2a" && (
                   <p className="micro">
-                    This sensor supports discovery only. Quantitative analysis
-                    currently requires Sentinel-2.
+                    Landsat supports aligned visual comparison; Sentinel-1
+                    supports discovery. Quantitative analysis currently requires
+                    Sentinel-2.
                   </p>
                 )}
               </div>
@@ -963,6 +1222,10 @@ function App() {
               alignment error can mimic change. No validated land-use or
               construction classification.
             </p>
+            <ComparisonAssistant
+              key={result.beforeScene + result.afterScene}
+              result={result}
+            />
             <div className="report-actions">
               <button className="primary" onClick={report}>
                 <Download size={15} />
@@ -1060,7 +1323,9 @@ function App() {
             >
               <X />
             </button>
-            {modal === "account" ? (
+            {modal === "how" ? (
+              <HowItWorks />
+            ) : modal === "account" ? (
               <>
                 <h2>Your evidence, saved.</h2>
                 {!supabase ? (
