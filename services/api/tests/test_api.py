@@ -47,3 +47,20 @@ def test_orbit_groups_allowlisted():
 
 def test_malformed_proxy_port_is_client_error():
     assert c.get('/api/raster', params={'url':'https://sentinel-cogs.s3.us-west-2.amazonaws.com:invalid/sentinel-s2-l2a-cogs/a.tif'}).status_code == 400
+
+
+def test_catalog_fallback_is_real_deduplicated_and_disclosed(monkeypatch):
+    from services.api.app import main
+    from fastapi import HTTPException
+
+    async def fetch(url, params=None, ttl=300, timeout=25):
+        if params['GROUP'] == 'active':
+            raise HTTPException(502, 'Unavailable')
+        return [{'NORAD_CAT_ID': 25544, 'OBJECT_NAME': 'ISS'}]
+
+    monkeypatch.setattr(main, 'fetch', fetch)
+    r = c.get('/api/v1/satellites')
+    assert r.status_code == 200
+    assert r.json()['partial'] is True
+    assert len(r.json()['items']) == 1
+    assert 'Partial catalog' in r.json()['note']

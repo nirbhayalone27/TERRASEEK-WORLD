@@ -52,7 +52,7 @@ def answer(q: EvidenceQuestion):
     limitations = 'These are browser-computed spectral measurements, not independently verified land-use findings. Seasonality, moisture, cloud-mask errors and registration can mimic change.'
     if re.search(r'construction|mining|urban|building|land.use|cause|why', text):
         response = 'The available NDVI/NDWI screening cannot establish construction, mining expansion, land-use classes or the cause of a difference. Inspect acquisitions, match seasons and use a validated classifier or independent evidence.'
-    elif re.search(r'satellite|sensor|capture|source|date', text):
+    elif re.search(r'satellite|sensor|capture|source|date', text) and not re.search(r'change|summary|summar', text):
         response = f'Baseline: {q.sensors[0]}, {q.dates[0]}, scene {q.scenes[0]}. Comparison: {q.sensors[1]}, {q.dates[1]}, scene {q.scenes[1]}. These are archive acquisitions, not inferred orbital passes.'
     elif re.search(r'cloud|mask|coverage|valid', text):
         response = f'{stats.valid} of {stats.total} pixels ({100 * stats.valid / stats.total:.1f}%) passed the joint SCL 4/5/6 mask: {area(stats.valid)} of comparable area. Excluded pixels are not counted as unchanged. SCL does not guarantee cloud-free or haze-free imagery.'

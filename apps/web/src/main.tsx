@@ -190,6 +190,7 @@ function App() {
     api<any>("satellites?group=active")
       .then((d) => {
         setCatalog(d.items);
+        if (d.partial) setSatError(d.note);
         worker.current?.postMessage({ type: "load", items: d.items });
         worker.current?.postMessage({ type: "positions", time: Date.now() });
       })
@@ -287,6 +288,7 @@ function App() {
       setAfter(undefined);
     }
     if (slot) setArchiveSlot(slot);
+    setScenes([]);
     try {
       const d = await api<any>("imagery/search", {
         lat: place.lat,
@@ -641,6 +643,7 @@ function App() {
                 </p>
               </div>
             )}
+            {!historical && <>
             <label>Observation period</label>
             <div className="dates">
               <input
@@ -658,6 +661,7 @@ function App() {
                 onChange={(e) => setEnd(e.target.value)}
               />
             </div>
+            </>}
             <div className="filter-row">
               <label>
                 Imagery source
@@ -690,14 +694,14 @@ function App() {
                 </select>
               </label>
             </div>
-            <button
+            {!historical && <button
               className="primary full"
               onClick={() => findScenes()}
               disabled={!!busy}
             >
               <ScanLine size={16} />
               Find observations <ArrowRight size={16} />
-            </button>
+            </button>}
             <p className="micro">
               Actual acquisitions. No synthetic satellite scenes.
             </p>

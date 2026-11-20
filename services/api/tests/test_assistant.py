@@ -5,7 +5,7 @@ c = TestClient(app)
 
 
 def evidence():
-    return dict(question='What changed?',location='Pune',dates=['2024-01-01T00:00:00Z','2025-01-01T00:00:00Z'],sensors=['sentinel-2a','sentinel-2b'],scenes=['before','after'],sources=['https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/before','https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/after'],stats=dict(total=100,valid=80,loss=10,gain=5,waterAppeared=2,waterDisappeared=1),threshold=0.2,resolution=20)
+    return dict(question='What changed between these two dates?',location='Pune',dates=['2024-01-01T00:00:00Z','2025-01-01T00:00:00Z'],sensors=['sentinel-2a','sentinel-2b'],scenes=['before','after'],sources=['https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/before','https://earth-search.aws.element84.com/v1/collections/sentinel-2-l2a/items/after'],stats=dict(total=100,valid=80,loss=10,gain=5,waterAppeared=2,waterDisappeared=1),threshold=0.2,resolution=20)
 
 
 def test_twelve_year_archive_interval():

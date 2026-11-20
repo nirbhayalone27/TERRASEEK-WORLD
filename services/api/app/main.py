@@ -56,12 +56,12 @@ async def protection(request: Request, call_next):
     return response
 
 
-async def fetch(url, params=None, ttl=300):
+async def fetch(url, params=None, ttl=300, timeout=25):
     key = url + json.dumps(params, sort_keys=True)
     if key in cache and cache[key][0] > time.monotonic():
         return cache[key][1]
     try:
-        async with httpx.AsyncClient(timeout=25, follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
             r = await client.get(
                 url,
                 params=params,
@@ -200,7 +200,7 @@ async def imagery(s: Search):
                     "grid:code",
                     p.get(
                         "s2:mgrs_tile",
-                        f["id"].split("_")[1] if "_" in f["id"] else f["id"],
+                        (f"WRS {p.get('landsat:wrs_path', '?')}/{p.get('landsat:wrs_row', '?')}" if s.collection == "landsat-c2-l2" else f["id"]),
                     ),
                 ),
                 "assets": {
@@ -227,17 +227,43 @@ async def imagery(s: Search):
 async def satellites(group: str = "active"):
     if group not in ["active", "stations", "resource", "science"]:
         raise HTTPException(422, "Unsupported satellite group")
-    data = await fetch(
-        "https://celestrak.org/NORAD/elements/gp.php",
-        {"GROUP": group, "FORMAT": "json"},
-        7200,
-    )
+    import asyncio
+
+    partial = False
+    try:
+        data = await fetch(
+            "https://celestrak.org/NORAD/elements/gp.php",
+            {"GROUP": group, "FORMAT": "json"}, 7200, timeout=10,
+        )
+    except HTTPException:
+        if group != "active":
+            raise
+        feeds = await asyncio.gather(*[
+            fetch("https://celestrak.org/NORAD/elements/gp.php",
+                  {"GROUP": fallback, "FORMAT": "json"}, 7200, timeout=10)
+            for fallback in ["resource", "stations", "science"]
+        ], return_exceptions=True)
+        objects = {}
+        for feed in feeds:
+            if isinstance(feed, list):
+                for item in feed:
+                    if isinstance(item, dict) and item.get("NORAD_CAT_ID"):
+                        objects[item["NORAD_CAT_ID"]] = item
+        if not objects:
+            raise HTTPException(502, "Orbital feeds are unavailable; retry later")
+        data = list(objects.values())
+        partial = True
     return {
         "source": "CelesTrak",
         "retrieved": datetime.now(timezone.utc).isoformat(),
         "items": data,
-        "note": "Active catalog only. Pass predictions do not prove image acquisition.",
+        "partial": partial,
+        "note": (
+            "Partial catalog: full active feed unavailable; resource, station and science feeds used where reachable. "
+            if partial else "Active catalog only. "
+        ) + "Pass predictions do not prove image acquisition.",
     }
+
 
 
 @app.get("/api/raster")
